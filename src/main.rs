@@ -25,38 +25,6 @@ struct Tile {
     flagged: bool,
     adjacent_mines:u8,
 }
-//#[derive(Debug)]
-// struct Grid {
-//     rows:u16,
-//     cols:u16,
-//     tiles: Vec<Tile>,
-//     tile_size:u16,
-// }
-
-// impl Grid {
-//     fn tiles(&self) -> u16 {
-//             return self.rows * self.cols;
-//     }
-
-//     fn get_tile(&self, row: u16, column: u16) -> Option<&Tile> { 
-//         if row < self.rows && column < self.cols { 
-//             Some(&self.tiles[(row * self.cols + column) as usize]) } 
-//         else { 
-//             None 
-//         }
-//     }
-// }
-// struct Game {
-//     state: GameState,
-//     mines: u16,
-//     font:Font,
-//     grid:Grid,
-//     window_width:i32,
-//     window_height:i32,
-// }
-
-// impl Game {
-// }
 
 fn is_tile_in_grid(row:i32, col:i32, grid_rows:u8, grid_cols:u8) ->bool {
     return row >= 0 && row < grid_rows as i32 && col >= 0 && col < grid_cols as i32;
