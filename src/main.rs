@@ -1,16 +1,34 @@
+#[allow(dead_code)]
 use macroquad::prelude::*;
 use macroquad::rand::srand;
 use macroquad::rand::gen_range;
 
-const ROWS:u8 = 8;
-const COLS:u8 = 8;
-const GRID_SIZE:u8 = ROWS * COLS;
+/*************************************************************
+Classic minesweeper levels:
+Beginner     -> 8 x 8 grid, 10 mines
+Intermediate -> 16 x 16 grid, 40 mines
+Expert       -> 30 x 16 grid, 99 mines
+*************************************************************/
+
+
+// TODO:
+// 1) Track total flagged cells and limit to number of mines
+// 2) Improve main manu and add level selection
+// 3) Fix screen for different levels, adjust tile sizes
+// 4) Add top menu and adjust grid positioning
+// 5) Clean-up draw_grid function, match on game state
+// 6) Move grid, tile, input handling etc code in own modules
+
+const ROWS:u8 = 16;
+const COLS:u8 = 16;
+const GRID_SIZE:u16 = ROWS as u16 * COLS as u16;
 const CELL_SIZE:f32 = 60.0;
-const MINES:u8 = 10;
+const MINES:u16 = 40;
 
 const WINDOW_WIDTH:i32 = (COLS as f32 * CELL_SIZE) as i32;
 const WINDOW_HEIGHT:i32 =(ROWS as f32 * CELL_SIZE) as i32;
 
+#[derive(PartialEq)]
 enum GameState {
     MeinMenu,
     GameWon,
@@ -24,6 +42,61 @@ struct Tile {
     has_mine: bool,
     flagged: bool,
     adjacent_mines:u8,
+}
+struct Assets {
+    one: Rect,
+    two: Rect,
+    three:Rect,
+    four:Rect,
+    five:Rect,
+    six:Rect,
+    seven:Rect,
+    eight:Rect,
+    bomb:Rect,
+    explosion:Rect,
+    flag:Rect,
+    spritesheet:Texture2D,
+    font:Font,
+}
+
+impl Default for Assets{
+    fn default() -> Self {
+        set_pc_assets_folder("../assets");
+        Self {
+            one:Rect::new(0.0, 0.0, 40.0, 40.0),
+            two:Rect::new(41.0, 0.0, 40.0, 40.0),
+            three:Rect::new(82.0, 0.0, 40.0, 40.0),
+            four:Rect::new(123.0, 0.0, 40.0, 40.0),
+            five:Rect::new(0.0, 41.0, 40.0, 40.0),
+            six:Rect::new(41.0, 41.0, 40.0, 40.0),
+            seven:Rect::new(82.0, 41.0, 40.0, 40.0),
+            eight:Rect::new(123.0, 41.0, 40.0, 40.0),
+            bomb:Rect::new(0.0, 82.0, 40.0, 40.0),
+            explosion:Rect::new(41.0, 82.0, 40.0, 40.0),
+            flag:Rect::new(82.0, 82.0, 40.0, 40.0),
+
+            // embed the spritesheet into the binary exe file
+            spritesheet:Texture2D::from_file_with_format(include_bytes!("../assets/minesweeper.png"), Some(ImageFormat::Png)),
+            font:load_ttf_font_from_bytes(include_bytes!("../assets/Russo_One.ttf")).unwrap(),
+        }
+    }
+}
+
+impl Assets {
+    fn draw(&self, rect:Rect, x:f32, y:f32){
+        let size = CELL_SIZE / 1.5;
+        draw_texture_ex(
+            &self.spritesheet, 
+            x - size / 2.0, 
+            y - size / 2.0, 
+            WHITE,
+            DrawTextureParams {
+                source: Some(rect),
+                dest_size: Some(Vec2::new(size, size)),
+                ..Default::default()
+            }
+        );
+    }
 }
 
 fn is_tile_in_grid(row:i32, col:i32, grid_rows:u8, grid_cols:u8) ->bool {
@@ -41,46 +114,75 @@ fn screen_to_tile_id(mouse_x:f32, mouse_y:f32, columns:i32, rows:i32, tile_size:
     }
 }
 
-fn draw_grid(arr: &[Tile]) {
+fn draw_grid(arr: &[Tile], assets:&Assets, state:&GameState) {
     for i in 0..arr.len() {
         let x:f32 = (i as u8 % COLS) as f32 * CELL_SIZE;
         let y:f32 = (i as u8 / COLS) as f32 * CELL_SIZE;
 
-        let font_size = CELL_SIZE / 1.5;
-        let text_size = measure_text("0", None, font_size as u16, 1.0);
-        let text_x = x + CELL_SIZE / 2.0 - text_size.width / 2.0;
-        let text_y: f32 = y + CELL_SIZE / 2.0 + text_size.height / 2.0;
+        // let font_size = CELL_SIZE / 1.5;
+        // let text_size = measure_text("0", Some(&assets.font), font_size as u16, 1.0);
+        // let text_x = x + CELL_SIZE / 2.0 - text_size.width / 2.0;
+        // let text_y: f32 = y + CELL_SIZE / 2.0 + text_size.height / 2.0;
 
         if arr[i].revealed {
             draw_rectangle(x, y, CELL_SIZE, CELL_SIZE, GRAY);
-            if arr[i].has_mine {
-                draw_circle(x + CELL_SIZE / 2.0, y + CELL_SIZE / 2.0, CELL_SIZE * 0.15, BLACK);
-                draw_line(x + 8.0, y + 8.0 , x + CELL_SIZE - 8.0, y + CELL_SIZE - 8.0, 4.0, RED);
-                draw_line(x + CELL_SIZE - 8.0, y + 8.0 , x + 8.0, y + CELL_SIZE - 8.0, 4.0, RED);
+            if arr[i].has_mine && (state == &GameState::GameRunning || state == &GameState::GameLost){
+                assets.draw(assets.explosion, x + CELL_SIZE / 2.0, y + CELL_SIZE / 2.0);
+            }
+
+            else if arr[i].has_mine && state == &GameState::GameWon {
+                draw_rectangle(x, y, CELL_SIZE, CELL_SIZE, LIGHTGRAY);
+                assets.draw(assets.bomb, x + CELL_SIZE / 2.0, y + CELL_SIZE / 2.0);
             }
             else {
 
-                if arr[i].adjacent_mines > 0 {
-                    draw_text(&arr[i].adjacent_mines.to_string(), text_x, text_y, font_size, BLACK);
-                    draw_text_ex(
-                        &arr[i].adjacent_mines.to_string(),
-                        text_x,
-                        text_y,
-                        TextParams {
-                            font_size: font_size as u16,
-                            color: BLACK,
-                            ..Default::default()
-                        }
-                    );
+                match arr[i].adjacent_mines {
+                    1 => assets.draw(assets.one, x + CELL_SIZE / 2.0, y + CELL_SIZE / 2.0),
+                    2 => assets.draw(assets.two, x + CELL_SIZE / 2.0, y + CELL_SIZE / 2.0),
+                    3 => assets.draw(assets.three, x + CELL_SIZE / 2.0, y + CELL_SIZE / 2.0),
+                    4 => assets.draw(assets.four, x + CELL_SIZE / 2.0, y + CELL_SIZE / 2.0),
+                    5 => assets.draw(assets.five, x + CELL_SIZE / 2.0, y + CELL_SIZE / 2.0),
+                    6 => assets.draw(assets.six, x + CELL_SIZE / 2.0, y + CELL_SIZE / 2.0),
+                    7 => assets.draw(assets.seven, x + CELL_SIZE / 2.0, y + CELL_SIZE / 2.0),
+                    8 => assets.draw(assets.eight, x + CELL_SIZE / 2.0, y + CELL_SIZE / 2.0),
+                    _ => (),
                 }
+
+                // using text rather than images
+                // if arr[i].adjacent_mines > 0 {
+                //     draw_text_ex(
+                //         &arr[i].adjacent_mines.to_string(),
+                //         text_x,
+                //         text_y,
+                //         TextParams {
+                //             font:Some(&assets.font),
+                //             font_size: font_size as u16,
+                //             color: BLACK,
+                //             ..Default::default()
+                //         }
+                //     );
+                // }
             }
         }
         else {
             draw_rectangle(x, y, CELL_SIZE, CELL_SIZE, LIGHTGRAY);
         }
         if arr[i].flagged {
-            draw_circle_lines(x + CELL_SIZE / 2.0, y + CELL_SIZE / 2.0, CELL_SIZE * 0.3, 4.0, RED);
-            draw_text("!", text_x, text_y, font_size, RED);
+            if state == &GameState::GameRunning {
+                assets.draw(assets.flag, x + CELL_SIZE / 2.0, y + CELL_SIZE / 2.0);
+            }
+            else if state == &GameState::GameLost || state == &GameState::GameWon {
+                if arr[i].has_mine {
+                    draw_rectangle(x, y, CELL_SIZE, CELL_SIZE, LIGHTGRAY);
+                    assets.draw(assets.bomb, x + CELL_SIZE / 2.0, y + CELL_SIZE / 2.0);
+                }
+                else {
+                    let offset = CELL_SIZE / 3.0;
+                    assets.draw(assets.flag, x + CELL_SIZE / 2.0, y + CELL_SIZE / 2.0);
+                    draw_line(x + offset, y + offset , x + CELL_SIZE - offset, y + CELL_SIZE - offset, 6.0, BLACK);
+                    draw_line(x + CELL_SIZE - offset, y + offset , x + offset, y + CELL_SIZE - offset, 6.0, BLACK);
+                }
+            }
         }
         draw_rectangle_lines(x, y, CELL_SIZE, CELL_SIZE, 1.0,DARKGRAY);
     }
@@ -161,6 +263,7 @@ fn reveal_all_adjacent_tiles(arr: &mut [Tile], tile_id:usize) {
                         if is_tile_in_grid(next_row, next_col, ROWS, COLS)
                         {
                             let next_id = (next_row * COLS as i32 + next_col) as usize;
+                            arr[next_id].adjacent_mines = num_adjacent_mines(&arr, ROWS, COLS, next_id);
                             reveal_tile(arr, next_id);
                         }
                     }
@@ -168,18 +271,6 @@ fn reveal_all_adjacent_tiles(arr: &mut [Tile], tile_id:usize) {
             }
         }
     } 
-}
-
-fn window_conf() -> Conf {
-    Conf {
-        window_title: "Rusty Mines".to_owned(),
-        window_width: WINDOW_WIDTH,
-        window_height: WINDOW_HEIGHT,
-        high_dpi: true,
-        window_resizable: false,
-        fullscreen: false,
-        ..Default::default()
-    }
 }
 
 fn num_adjacent_mines(arr: &[Tile], grid_rows:u8, grid_cols:u8, tile_id:usize)->u8{
@@ -234,16 +325,19 @@ fn update_game_state(arr: &[Tile], state: &mut GameState) {
     let mut flagged_mines = 0;
 
     for tile in arr {
-        if tile.revealed && tile.has_mine {
-            *state = GameState::GameLost;
-            return;
+        if *state == GameState::GameRunning {
+            if tile.revealed && tile.has_mine {
+                *state = GameState::GameLost;
+                return;
+            }
+            if tile.revealed && !tile.has_mine {
+                revealed_tiles += 1;
+            }
+            if tile.flagged && tile.has_mine {
+                flagged_mines += 1;
+            }
         }
-        if tile.revealed && !tile.has_mine {
-            revealed_tiles += 1;
-        }
-        if tile.flagged && tile.has_mine {
-            flagged_mines += 1;
-        }
+
     }
 
     if revealed_tiles == (GRID_SIZE - MINES) as usize {
@@ -253,15 +347,34 @@ fn update_game_state(arr: &[Tile], state: &mut GameState) {
     }
 }
 
+fn window_conf() -> Conf {
+    Conf {
+        window_title: "Rusty Mines".to_owned(),
+        window_width: WINDOW_WIDTH,
+        window_height: WINDOW_HEIGHT,
+        high_dpi: true,
+        window_resizable: false,
+        fullscreen: false,
+        ..Default::default()
+    }
+}
+
 #[macroquad::main(window_conf)]
 async fn main() {
-    let font_bytes = include_bytes!("../assets/Russo_One.ttf");
-    let my_font = load_ttf_font_from_bytes(font_bytes).unwrap();
+    let assets:Assets = Default::default();
+
+    // embed the font into the binary
+    let spritesheet_data = include_bytes!("../assets/minesweeper.png");
+    let texture: Texture2D = Texture2D::from_file_with_format(spritesheet_data.as_ref(), Some(ImageFormat::Png));
+    texture.set_filter(FilterMode::Nearest);
+    build_textures_atlas();
+
     let mut state = GameState::MeinMenu;
     let mut grid:[Tile; GRID_SIZE as usize] = [Tile { revealed: false, has_mine: false, flagged: false, adjacent_mines: 0 }; GRID_SIZE as usize];
 
     loop {
-        clear_background(BLACK);
+        clear_background(DARKBROWN);
+        update_game_state(&grid, &mut state);
 
         match state {
             GameState::MeinMenu => {
@@ -271,7 +384,7 @@ async fn main() {
                 
                 let text1 = "Rusty Mines";
                 let font1_size = CELL_SIZE as u16;
-                let text1_size = measure_text(&text1, Some(&my_font),font1_size,1.0);
+                let text1_size = measure_text(&text1, Some(&assets.font),font1_size,1.0);
                 let text1_x = screen_width / 2.0 - text1_size.width / 2.0;
                 let text1_y = screen_height / 2.0 - text1_size.height / 2.0;
 
@@ -280,7 +393,7 @@ async fn main() {
                     text1_x,
                     text1_y,
                     TextParams {
-                        font: Some(&my_font.clone()),
+                        font: Some(&assets.font),
                         font_size: font1_size as u16,
                         color: ORANGE,
                         ..Default::default()
@@ -289,7 +402,7 @@ async fn main() {
 
                 let text2 = "Press ENTER to play...";
                 let font2_size = (CELL_SIZE / 2.0) as u16;
-                let text2_size = measure_text(&text2, Some(&my_font),font2_size,1.0);
+                let text2_size = measure_text(&text2, Some(&assets.font),font2_size,1.0);
                 let text2_x = screen_width / 2.0 - text2_size.width / 2.0;
                 let text2_y = screen_height / 2.0 - text2_size.height / 2.0 + text1_size.height/2.0 + 20.0;
 
@@ -298,7 +411,7 @@ async fn main() {
                     text2_x,
                     text2_y,
                     TextParams {
-                        font: Some(&my_font.clone()),
+                        font: Some(&assets.font),
                         font_size: font2_size as u16,
                         color: WHITE,
                         ..Default::default()
@@ -312,14 +425,13 @@ async fn main() {
             }
 
             GameState::GameRunning => {
-                draw_grid(&grid);
-
+                draw_grid(&grid, &assets, &state);
+       
                 if is_mouse_button_pressed(MouseButton::Right) {
                     let (mouse_x, mouse_y) = mouse_position();
                     let tile_id = screen_to_tile_id(mouse_x, mouse_y, COLS as i32, ROWS as i32, CELL_SIZE);
                     if tile_id >= 0 {
                         flag_tile(& mut grid, tile_id as usize);
-                        update_game_state(&grid, &mut state);
                     }
                 }
 
@@ -329,7 +441,6 @@ async fn main() {
                     if tile_id >= 0 {
                         grid[tile_id as usize].adjacent_mines = num_adjacent_mines(&grid,ROWS, COLS, tile_id as usize);
                         reveal_tile(& mut grid, tile_id as usize);
-                        update_game_state(&grid, &mut state);
                     }
                 }
 
@@ -343,20 +454,20 @@ async fn main() {
             }
 
             GameState::GameLost => {
-                draw_grid(&grid);
+                draw_grid(&grid, &assets, &state);
 
                 let screen_width = screen_width();
                 let screen_height = screen_height();
 
                 let text_1 = "BOOM! You Lost...";
                 let font1_size = (CELL_SIZE / 1.5) as u16;
-                let text1_size = measure_text(&text_1, Some(&my_font), font1_size, 1.0);
+                let text1_size = measure_text(&text_1, Some(&assets.font), font1_size, 1.0);
                 let text1_x = screen_width / 2.0 - text1_size.width / 2.0;
                 let text1_y = screen_height / 2.0 - text1_size.height / 2.0;
 
                 let text2 = "Press ENTER to play again...";
                 let font2_size = (CELL_SIZE / 2.0) as u16;
-                let text2_size = measure_text(&text2, Some(&my_font),font2_size,1.0);
+                let text2_size = measure_text(&text2, Some(&assets.font),font2_size,1.0);
                 let text2_x = screen_width / 2.0 - text2_size.width / 2.0;
                 let text2_y = screen_height / 2.0 - text2_size.height / 2.0 + text1_size.height/2.0 + 20.0;
 
@@ -373,7 +484,7 @@ async fn main() {
                     text1_x,
                     text1_y,
                     TextParams {
-                        font: Some(&my_font.clone()),
+                        font: Some(&assets.font),
                         font_size: font1_size as u16,
                         color: RED,
                         ..Default::default()
@@ -385,7 +496,7 @@ async fn main() {
                     text2_x,
                     text2_y,
                     TextParams {
-                        font: Some(&my_font.clone()),
+                        font: Some(&assets.font),
                         font_size: font2_size as u16,
                         color: WHITE,
                         ..Default::default()
@@ -401,20 +512,20 @@ async fn main() {
                 for tile in &mut grid {
                     tile.revealed = true;
                 }
-                draw_grid(&grid);
+                draw_grid(&grid, &assets, &state);
 
                 let screen_width = screen_width();
                 let screen_height = screen_height();
 
                 let text1 = "You Won!";
                 let font1_size = (CELL_SIZE / 1.5) as u16;
-                let text1_size = measure_text(&text1, Some(&my_font),font1_size,1.0);
+                let text1_size = measure_text(&text1, Some(&assets.font),font1_size,1.0);
                 let text1_x = screen_width / 2.0 - text1_size.width / 2.0;
                 let text1_y = screen_height / 2.0 - text1_size.height / 2.0;
 
                 let text2 = "Press ENTER to play again...";
                 let font2_size = (CELL_SIZE / 2.0) as u16;
-                let text2_size = measure_text(&text2, Some(&my_font),font2_size,1.0);
+                let text2_size = measure_text(&text2, Some(&assets.font),font2_size,1.0);
                 let text2_x = screen_width / 2.0 - text2_size.width / 2.0;
                 let text2_y = screen_height / 2.0 - text2_size.height / 2.0 + text1_size.height/2.0 + 20.0;
 
@@ -431,7 +542,7 @@ async fn main() {
                     text1_x,
                     text1_y,
                     TextParams {
-                        font: Some(&my_font),
+                        font: Some(&assets.font),
                         font_size: font1_size as u16,
                         color: GREEN,
                         ..Default::default()
@@ -443,7 +554,7 @@ async fn main() {
                     text2_x,
                     text2_y,
                     TextParams {
-                        font: Some(&my_font),
+                        font: Some(&assets.font),
                         font_size: font2_size as u16,
                         color: WHITE,
                         ..Default::default()
