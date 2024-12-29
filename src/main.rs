@@ -1,4 +1,3 @@
-#[allow(dead_code)]
 use macroquad::prelude::*;
 use macroquad::rand::srand;
 use macroquad::rand::gen_range;
@@ -10,23 +9,50 @@ Intermediate -> 16 x 16 grid, 40 mines
 Expert       -> 30 x 16 grid, 99 mines
 *************************************************************/
 
-
 // TODO:
-// 1) Track total flagged cells and limit to number of mines
-// 2) Improve main manu and add level selection
-// 3) Fix screen for different levels, adjust tile sizes
-// 4) Add top menu and adjust grid positioning
-// 5) Clean-up draw_grid function, match on game state
-// 6) Move grid, tile, input handling etc code in own modules
+// - Track total flagged cells and limit to number of mines
+// - Update logic, so that first celected cell is not a mine
+// - Add timer and display time on screen
+// - Improve main manu and add level selection
+// - Fix screen for different levels, adjust tile sizes
+// - Add top menu and adjust grid positioning
+// - Clean-up draw_grid function, match on game state
+// - Move grid, tile, input handling etc code in own modules
 
-const ROWS:u8 = 16;
-const COLS:u8 = 16;
+const WINDOW_WIDTH:i32 = 800;
+const WINDOW_HEIGHT:i32 = 600;
+#[allow(dead_code)]
+struct Game {
+    level:u8,
+    rows:u8,
+    columns:u8,
+    tiles:u16,
+    cell_size:f32,
+    mines:u16,
+    mines_flagged:u16,
+    level_time:u64,
+}
+
+impl Default for Game {
+    fn default() -> Self {
+        Self {
+            level: 1,
+            rows: 8,
+            columns: 8,
+            tiles: 64,
+            cell_size: (WINDOW_WIDTH as f32 / 8.0).min(WINDOW_HEIGHT as f32 / 8.0),
+            mines: 10,
+            mines_flagged: 0,
+            level_time: 0,
+        }
+    }
+}
+
+const ROWS:u8 = 8;
+const COLS:u8 = 8;
 const GRID_SIZE:u16 = ROWS as u16 * COLS as u16;
 const CELL_SIZE:f32 = 60.0;
-const MINES:u16 = 40;
-
-const WINDOW_WIDTH:i32 = (COLS as f32 * CELL_SIZE) as i32;
-const WINDOW_HEIGHT:i32 =(ROWS as f32 * CELL_SIZE) as i32;
+const MINES:u16 = 10;
 
 #[derive(PartialEq)]
 enum GameState {
@@ -62,6 +88,13 @@ struct Assets {
 impl Default for Assets{
     fn default() -> Self {
         set_pc_assets_folder("../assets");
+
+        // embed the spritesheet into the binary exe file
+        let spritesheet = Texture2D::from_file_with_format(include_bytes!("../assets/minesweeper.png"), Some(ImageFormat::Png));
+        let font = load_ttf_font_from_bytes(include_bytes!("../assets/Russo_One.ttf")).unwrap();
+        spritesheet.set_filter(FilterMode::Nearest);
+        build_textures_atlas();
+
         Self {
             one:Rect::new(0.0, 0.0, 40.0, 40.0),
             two:Rect::new(41.0, 0.0, 40.0, 40.0),
@@ -74,10 +107,9 @@ impl Default for Assets{
             bomb:Rect::new(0.0, 82.0, 40.0, 40.0),
             explosion:Rect::new(41.0, 82.0, 40.0, 40.0),
             flag:Rect::new(82.0, 82.0, 40.0, 40.0),
+            spritesheet,
+            font,
 
-            // embed the spritesheet into the binary exe file
-            spritesheet:Texture2D::from_file_with_format(include_bytes!("../assets/minesweeper.png"), Some(ImageFormat::Png)),
-            font:load_ttf_font_from_bytes(include_bytes!("../assets/Russo_One.ttf")).unwrap(),
         }
     }
 }
@@ -362,12 +394,7 @@ fn window_conf() -> Conf {
 #[macroquad::main(window_conf)]
 async fn main() {
     let assets:Assets = Default::default();
-
-    // embed the font into the binary
-    let spritesheet_data = include_bytes!("../assets/minesweeper.png");
-    let texture: Texture2D = Texture2D::from_file_with_format(spritesheet_data.as_ref(), Some(ImageFormat::Png));
-    texture.set_filter(FilterMode::Nearest);
-    build_textures_atlas();
+    let game:Game = Default::default();
 
     let mut state = GameState::MeinMenu;
     let mut grid:[Tile; GRID_SIZE as usize] = [Tile { revealed: false, has_mine: false, flagged: false, adjacent_mines: 0 }; GRID_SIZE as usize];
