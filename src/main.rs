@@ -21,6 +21,7 @@ Expert       -> 30 x 16 grid, 99 mines
 
 const WINDOW_WIDTH:i32 = 800;
 const WINDOW_HEIGHT:i32 = 600;
+const MAX_TILE_SIZE:f32 = 80.0;
 
 #[allow(dead_code)]
 struct Game {
@@ -39,15 +40,13 @@ impl Game {
             rows,
             columns,
             tiles: rows as u16 * columns as u16,
-            cell_size: calculate_tile_size(rows, columns, 80.0),
+            cell_size: calculate_tile_size(rows, columns, MAX_TILE_SIZE),
             mines,
             mines_flagged: 0,
             level_time: 0,
         }
     }
 }
-
-const MAX_TILE_SIZE:f32 = 90.0;
 
 #[derive(PartialEq)]
 enum GameState {
@@ -387,7 +386,7 @@ async fn main() {
     loop {
         clear_background(DARKBROWN);
         update_game_state(&grid, &mut state, game.mines);
-        let tile_size = calculate_tile_size(game.rows, game.columns, 90.0);
+        let tile_size = calculate_tile_size(game.rows, game.columns, MAX_TILE_SIZE);
 
         match state {
             GameState::MeinMenu => {
