@@ -21,9 +21,9 @@ Expert       -> 30 x 16 grid, 99 mines
 
 const WINDOW_WIDTH:i32 = 800;
 const WINDOW_HEIGHT:i32 = 600;
+
 #[allow(dead_code)]
 struct Game {
-    level:u8,
     rows:u8,
     columns:u8,
     tiles:u16,
@@ -33,26 +33,21 @@ struct Game {
     level_time:u64,
 }
 
-impl Default for Game {
-    fn default() -> Self {
+impl Game {
+    fn new(rows:u8, columns:u8, mines:u16) -> Self {
         Self {
-            level: 1,
-            rows: 8,
-            columns: 8,
-            tiles: 64,
-            cell_size: (WINDOW_WIDTH as f32 / 8.0).min(WINDOW_HEIGHT as f32 / 8.0),
-            mines: 10,
+            rows,
+            columns,
+            tiles: rows as u16 * columns as u16,
+            cell_size: calculate_tile_size(rows, columns, 80.0),
+            mines,
             mines_flagged: 0,
             level_time: 0,
         }
     }
 }
 
-const ROWS:u8 = 8;
-const COLS:u8 = 8;
-const GRID_SIZE:u16 = ROWS as u16 * COLS as u16;
-const CELL_SIZE:f32 = 60.0;
-const MINES:u16 = 10;
+const MAX_TILE_SIZE:f32 = 90.0;
 
 #[derive(PartialEq)]
 enum GameState {
@@ -115,8 +110,8 @@ impl Default for Assets{
 }
 
 impl Assets {
-    fn draw(&self, rect:Rect, x:f32, y:f32){
-        let size = CELL_SIZE / 1.5;
+    fn draw(&self, rect:Rect, x:f32, y:f32, tile_size:f32){
+        let size = tile_size / 1.5;
         draw_texture_ex(
             &self.spritesheet, 
             x - size / 2.0, 
@@ -129,6 +124,13 @@ impl Assets {
             }
         );
     }
+}
+
+fn calculate_tile_size(rows:u8, columns:u8, max_tile_size:f32) -> f32 {
+    let screen_width = screen_width();
+    let screen_height = screen_height();
+
+    ((screen_width / columns as f32).min(screen_height / (rows as f32 + 1.0))).min(max_tile_size)
 }
 
 fn is_tile_in_grid(row:i32, col:i32, grid_rows:u8, grid_cols:u8) ->bool {
@@ -146,77 +148,59 @@ fn screen_to_tile_id(mouse_x:f32, mouse_y:f32, columns:i32, rows:i32, tile_size:
     }
 }
 
-fn draw_grid(arr: &[Tile], assets:&Assets, state:&GameState) {
+fn draw_grid(arr: &[Tile], assets:&Assets, state:&GameState, rows:u8, columns:u8, max_tile_size:f32) {
     for i in 0..arr.len() {
-        let x:f32 = (i as u8 % COLS) as f32 * CELL_SIZE;
-        let y:f32 = (i as u8 / COLS) as f32 * CELL_SIZE;
-
-        // let font_size = CELL_SIZE / 1.5;
-        // let text_size = measure_text("0", Some(&assets.font), font_size as u16, 1.0);
-        // let text_x = x + CELL_SIZE / 2.0 - text_size.width / 2.0;
-        // let text_y: f32 = y + CELL_SIZE / 2.0 + text_size.height / 2.0;
+        let tile_size = calculate_tile_size(rows, columns, max_tile_size);
+        let x:f32 = (i as u8 % columns) as f32 * tile_size;
+        let y:f32 = (i as u8 / columns) as f32 * tile_size;
 
         if arr[i].revealed {
-            draw_rectangle(x, y, CELL_SIZE, CELL_SIZE, GRAY);
+            draw_rectangle(x, y, tile_size, tile_size, GRAY);
             if arr[i].has_mine && (state == &GameState::GameRunning || state == &GameState::GameLost){
-                assets.draw(assets.explosion, x + CELL_SIZE / 2.0, y + CELL_SIZE / 2.0);
+                assets.draw(assets.explosion, x + tile_size / 2.0, y + tile_size / 2.0, tile_size);
             }
 
             else if arr[i].has_mine && state == &GameState::GameWon {
-                draw_rectangle(x, y, CELL_SIZE, CELL_SIZE, LIGHTGRAY);
-                assets.draw(assets.bomb, x + CELL_SIZE / 2.0, y + CELL_SIZE / 2.0);
+                draw_rectangle(x, y, tile_size, tile_size, LIGHTGRAY);
+                assets.draw(assets.bomb, x + tile_size / 2.0, y + tile_size / 2.0, tile_size);
             }
             else {
 
                 match arr[i].adjacent_mines {
-                    1 => assets.draw(assets.one, x + CELL_SIZE / 2.0, y + CELL_SIZE / 2.0),
-                    2 => assets.draw(assets.two, x + CELL_SIZE / 2.0, y + CELL_SIZE / 2.0),
-                    3 => assets.draw(assets.three, x + CELL_SIZE / 2.0, y + CELL_SIZE / 2.0),
-                    4 => assets.draw(assets.four, x + CELL_SIZE / 2.0, y + CELL_SIZE / 2.0),
-                    5 => assets.draw(assets.five, x + CELL_SIZE / 2.0, y + CELL_SIZE / 2.0),
-                    6 => assets.draw(assets.six, x + CELL_SIZE / 2.0, y + CELL_SIZE / 2.0),
-                    7 => assets.draw(assets.seven, x + CELL_SIZE / 2.0, y + CELL_SIZE / 2.0),
-                    8 => assets.draw(assets.eight, x + CELL_SIZE / 2.0, y + CELL_SIZE / 2.0),
+                    1 => assets.draw(assets.one, x + tile_size / 2.0, y + tile_size / 2.0, tile_size),
+                    2 => assets.draw(assets.two, x + tile_size / 2.0, y + tile_size / 2.0, tile_size),
+                    3 => assets.draw(assets.three, x + tile_size / 2.0, y + tile_size / 2.0, tile_size),
+                    4 => assets.draw(assets.four, x + tile_size / 2.0, y + tile_size / 2.0, tile_size),
+                    5 => assets.draw(assets.five, x + tile_size / 2.0, y + tile_size / 2.0, tile_size),
+                    6 => assets.draw(assets.six, x + tile_size / 2.0, y + tile_size / 2.0, tile_size),
+                    7 => assets.draw(assets.seven, x + tile_size / 2.0, y + tile_size / 2.0, tile_size),
+                    8 => assets.draw(assets.eight, x + tile_size / 2.0, y + tile_size / 2.0, tile_size),
                     _ => (),
                 }
 
-                // using text rather than images
-                // if arr[i].adjacent_mines > 0 {
-                //     draw_text_ex(
-                //         &arr[i].adjacent_mines.to_string(),
-                //         text_x,
-                //         text_y,
-                //         TextParams {
-                //             font:Some(&assets.font),
-                //             font_size: font_size as u16,
-                //             color: BLACK,
-                //             ..Default::default()
-                //         }
-                //     );
-                // }
             }
         }
         else {
-            draw_rectangle(x, y, CELL_SIZE, CELL_SIZE, LIGHTGRAY);
+            draw_rectangle(x, y, tile_size, tile_size, LIGHTGRAY);
         }
         if arr[i].flagged {
             if state == &GameState::GameRunning {
-                assets.draw(assets.flag, x + CELL_SIZE / 2.0, y + CELL_SIZE / 2.0);
+                assets.draw(assets.flag, x + tile_size / 2.0, y + tile_size / 2.0, tile_size);
             }
             else if state == &GameState::GameLost || state == &GameState::GameWon {
                 if arr[i].has_mine {
-                    draw_rectangle(x, y, CELL_SIZE, CELL_SIZE, LIGHTGRAY);
-                    assets.draw(assets.bomb, x + CELL_SIZE / 2.0, y + CELL_SIZE / 2.0);
+                    draw_rectangle(x, y, tile_size, tile_size, LIGHTGRAY);
+                    assets.draw(assets.bomb, x + tile_size / 2.0, y + tile_size / 2.0, tile_size);
                 }
                 else {
-                    let offset = CELL_SIZE / 3.0;
-                    assets.draw(assets.flag, x + CELL_SIZE / 2.0, y + CELL_SIZE / 2.0);
-                    draw_line(x + offset, y + offset , x + CELL_SIZE - offset, y + CELL_SIZE - offset, 6.0, BLACK);
-                    draw_line(x + CELL_SIZE - offset, y + offset , x + offset, y + CELL_SIZE - offset, 6.0, BLACK);
+                    let offset = tile_size / 3.0;
+                    assets.draw(assets.flag, x + tile_size / 2.0, y + tile_size / 2.0, tile_size);
+                    draw_line(x + offset, y + offset , x + tile_size - offset, y + tile_size - offset, 6.0, BLACK);
+                    draw_line(x + tile_size - offset, y + offset , x + offset, y + tile_size - offset, 6.0, BLACK);
                 }
             }
         }
-        draw_rectangle_lines(x, y, CELL_SIZE, CELL_SIZE, 1.0,DARKGRAY);
+        draw_rectangle_lines(x, y, tile_size, tile_size, 1.0,DARKGRAY);
     }
 }
 
@@ -226,16 +210,16 @@ fn flag_tile(arr: &mut [Tile], tile_id:usize){
     }
 }
 
-fn reveal_tile(arr: &mut [Tile], tile_id:usize){
+fn reveal_tile(arr: &mut [Tile], tile_id:usize, rows:u8, cols:u8){
     if !arr[tile_id].flagged {
         arr[tile_id].revealed = true;
         if arr[tile_id].adjacent_mines == 0 {
-            reveal_adjacent_tiles(arr, tile_id)
+            reveal_adjacent_tiles(arr, tile_id, rows, cols);
         }
     }
 }
 
-fn reveal_adjacent_tiles(arr:&mut [Tile], tile_id:usize) {
+fn reveal_adjacent_tiles(arr:&mut [Tile], tile_id:usize, rows:u8, cols:u8) {
     if arr[tile_id].adjacent_mines == 0 && !arr[tile_id].has_mine {
         for r in -1..2 {
             for c in -1..2{
@@ -243,15 +227,15 @@ fn reveal_adjacent_tiles(arr:&mut [Tile], tile_id:usize) {
                     continue;
                 }
                 else {
-                    let next_row:i32 = tile_id as i32 / COLS as i32 + r;
-                    let next_col:i32 = tile_id as i32 % COLS as i32 + c;
-                    if is_tile_in_grid(next_row, next_col, ROWS, COLS)
+                    let next_row:i32 = tile_id as i32 / cols as i32 + r;
+                    let next_col:i32 = tile_id as i32 % cols as i32 + c;
+                    if is_tile_in_grid(next_row, next_col, rows, cols)
                     {
-                        let next_id = (next_row * COLS as i32 + next_col) as usize;
+                        let next_id = (next_row * cols as i32 + next_col) as usize;
                         if arr[next_id].revealed ==false {
-                            arr[next_id].adjacent_mines = num_adjacent_mines(&arr, ROWS, COLS, next_id);
+                            arr[next_id].adjacent_mines = num_adjacent_mines(&arr, rows, cols, next_id);
                             if !arr[next_id].has_mine {
-                                reveal_tile(arr, next_id);
+                                reveal_tile(arr, next_id, rows, cols);
                             }
                         }
                     }
@@ -263,7 +247,7 @@ fn reveal_adjacent_tiles(arr:&mut [Tile], tile_id:usize) {
 }
 
 // chording action - both mouse buttons pressed on a revelealed tile whith a number equal to flagged adjacent cells
-fn reveal_all_adjacent_tiles(arr: &mut [Tile], tile_id:usize) {
+fn reveal_all_adjacent_tiles(arr: &mut [Tile], tile_id:usize, rows:u8, cols:u8) {
     // count flagged adjecent cells
     let mut flagged_cells = 0;
 
@@ -273,11 +257,11 @@ fn reveal_all_adjacent_tiles(arr: &mut [Tile], tile_id:usize) {
                 continue;
             }
             else {
-                let next_row:i32 = tile_id as i32 / COLS as i32 + r;
-                let next_col:i32 = tile_id as i32 % COLS as i32 + c;
-                if is_tile_in_grid(next_row, next_col, ROWS, COLS)
+                let next_row:i32 = tile_id as i32 / cols as i32 + r;
+                let next_col:i32 = tile_id as i32 % cols as i32 + c;
+                if is_tile_in_grid(next_row, next_col, rows, cols)
                 {
-                    let next_id = (next_row * COLS as i32 + next_col) as usize;
+                    let next_id = (next_row * cols as i32 + next_col) as usize;
                     if arr[next_id].flagged { flagged_cells += 1; }
                 }
             }
@@ -290,13 +274,13 @@ fn reveal_all_adjacent_tiles(arr: &mut [Tile], tile_id:usize) {
                         continue;
                     }
                     else {
-                        let next_row:i32 = tile_id as i32 / COLS as i32 + r;
-                        let next_col:i32 = tile_id as i32 % COLS as i32 + c;
-                        if is_tile_in_grid(next_row, next_col, ROWS, COLS)
+                        let next_row:i32 = tile_id as i32 / cols as i32 + r;
+                        let next_col:i32 = tile_id as i32 % cols as i32 + c;
+                        if is_tile_in_grid(next_row, next_col, rows, cols)
                         {
-                            let next_id = (next_row * COLS as i32 + next_col) as usize;
-                            arr[next_id].adjacent_mines = num_adjacent_mines(&arr, ROWS, COLS, next_id);
-                            reveal_tile(arr, next_id);
+                            let next_id = (next_row * cols as i32 + next_col) as usize;
+                            arr[next_id].adjacent_mines = num_adjacent_mines(&arr, rows, cols, next_id);
+                            reveal_tile(arr, next_id, rows, cols);
                         }
                     }
                 }
@@ -332,16 +316,16 @@ fn num_adjacent_mines(arr: &[Tile], grid_rows:u8, grid_cols:u8, tile_id:usize)->
     return mines;
 }
 
-fn initialize_grid(arr: &mut[Tile]) {
-    srand(get_time() as u64);
-    for i in 0..GRID_SIZE {
+fn initialize_grid(arr: &mut[Tile], num_mines:u16, num_tiles:u16) {
+    //srand(get_time() as u64);
+    for i in 0..num_tiles {
         arr[i as usize] = Tile { revealed: false, has_mine: false, flagged: false, adjacent_mines:0 };
     }
 
-    let mut placed_mines = 0;
+    let mut placed_mines:u16 = 0;
 
-    while placed_mines < MINES {
-        let n:usize = gen_range(0, GRID_SIZE as usize);
+    while placed_mines < num_mines {
+        let n:usize = gen_range(0, num_tiles as usize);
         if arr[n].has_mine == true {
             continue;
         }
@@ -352,7 +336,7 @@ fn initialize_grid(arr: &mut[Tile]) {
     }
 }
 
-fn update_game_state(arr: &[Tile], state: &mut GameState) {
+fn update_game_state(arr: &[Tile], state: &mut GameState, num_mines:u16) {
     let mut revealed_tiles = 0;
     let mut flagged_mines = 0;
 
@@ -372,9 +356,9 @@ fn update_game_state(arr: &[Tile], state: &mut GameState) {
 
     }
 
-    if revealed_tiles == (GRID_SIZE - MINES) as usize {
+    if revealed_tiles == arr.len() - num_mines as usize {
         *state = GameState::GameWon;
-    } else if flagged_mines == MINES {
+    } else if flagged_mines == num_mines {
         *state = GameState::GameWon;
     }
 }
@@ -393,15 +377,17 @@ fn window_conf() -> Conf {
 
 #[macroquad::main(window_conf)]
 async fn main() {
+    srand(macroquad::miniquad::date::now() as u64);
     let assets:Assets = Default::default();
-    let game:Game = Default::default();
+    let game:Game = Game::new(10, 10, 12);
 
     let mut state = GameState::MeinMenu;
-    let mut grid:[Tile; GRID_SIZE as usize] = [Tile { revealed: false, has_mine: false, flagged: false, adjacent_mines: 0 }; GRID_SIZE as usize];
+    let mut grid:Vec<Tile> = vec![Tile { revealed: false, has_mine: false, flagged: false, adjacent_mines: 0 }; game.tiles as usize];
 
     loop {
         clear_background(DARKBROWN);
-        update_game_state(&grid, &mut state);
+        update_game_state(&grid, &mut state, game.mines);
+        let tile_size = calculate_tile_size(game.rows, game.columns, 90.0);
 
         match state {
             GameState::MeinMenu => {
@@ -410,7 +396,7 @@ async fn main() {
                 
                 
                 let text1 = "Rusty Mines";
-                let font1_size = CELL_SIZE as u16;
+                let font1_size = tile_size as u16;
                 let text1_size = measure_text(&text1, Some(&assets.font),font1_size,1.0);
                 let text1_x = screen_width / 2.0 - text1_size.width / 2.0;
                 let text1_y = screen_height / 2.0 - text1_size.height / 2.0;
@@ -428,7 +414,7 @@ async fn main() {
                 );
 
                 let text2 = "Press ENTER to play...";
-                let font2_size = (CELL_SIZE / 2.0) as u16;
+                let font2_size = (tile_size / 2.0) as u16;
                 let text2_size = measure_text(&text2, Some(&assets.font),font2_size,1.0);
                 let text2_x = screen_width / 2.0 - text2_size.width / 2.0;
                 let text2_y = screen_height / 2.0 - text2_size.height / 2.0 + text1_size.height/2.0 + 20.0;
@@ -446,17 +432,17 @@ async fn main() {
                 );
 
                 if is_key_pressed(KeyCode::Enter) {
-                    initialize_grid(& mut grid); 
+                    initialize_grid(& mut grid, game.mines, game.tiles); 
                     state = GameState::GameRunning;
                 }
             }
 
             GameState::GameRunning => {
-                draw_grid(&grid, &assets, &state);
+                draw_grid(&grid, &assets, &state, game.rows, game.columns, game.cell_size);
        
                 if is_mouse_button_pressed(MouseButton::Right) {
                     let (mouse_x, mouse_y) = mouse_position();
-                    let tile_id = screen_to_tile_id(mouse_x, mouse_y, COLS as i32, ROWS as i32, CELL_SIZE);
+                    let tile_id = screen_to_tile_id(mouse_x, mouse_y, game.columns as i32, game.rows as i32, tile_size);
                     if tile_id >= 0 {
                         flag_tile(& mut grid, tile_id as usize);
                     }
@@ -464,36 +450,35 @@ async fn main() {
 
                 if is_mouse_button_pressed(MouseButton::Left) {
                     let (mouse_x, mouse_y) = mouse_position();
-                    let tile_id = screen_to_tile_id(mouse_x, mouse_y, COLS as i32 , ROWS as i32, CELL_SIZE);
+                    let tile_id = screen_to_tile_id(mouse_x, mouse_y, game.columns as i32, game.rows as i32, tile_size);
                     if tile_id >= 0 {
-                        grid[tile_id as usize].adjacent_mines = num_adjacent_mines(&grid,ROWS, COLS, tile_id as usize);
-                        reveal_tile(& mut grid, tile_id as usize);
+                        grid[tile_id as usize].adjacent_mines = num_adjacent_mines(&grid, game.rows, game.columns, tile_id as usize);
+                        reveal_tile(& mut grid, tile_id as usize, game.rows, game.columns);
                     }
                 }
 
                 if is_mouse_button_down(MouseButton::Left) && is_mouse_button_down(MouseButton::Right) {
                     let (mouse_x, mouse_y) = mouse_position();
-                    let tile_id = screen_to_tile_id(mouse_x, mouse_y, COLS as i32 , ROWS as i32, CELL_SIZE);
+                    let tile_id = screen_to_tile_id(mouse_x, mouse_y, game.columns as i32, game.rows as i32, tile_size);
                     if tile_id >= 0 {
-                        reveal_all_adjacent_tiles(&mut grid, tile_id as usize);
+                        reveal_all_adjacent_tiles(&mut grid, tile_id as usize, game.rows, game.columns);
                     }
-                }
-            }
+                }            }
 
             GameState::GameLost => {
-                draw_grid(&grid, &assets, &state);
+                draw_grid(&grid, &assets, &state, game.rows, game.columns, MAX_TILE_SIZE);
 
                 let screen_width = screen_width();
                 let screen_height = screen_height();
 
                 let text_1 = "BOOM! You Lost...";
-                let font1_size = (CELL_SIZE / 1.5) as u16;
+                let font1_size = (tile_size / 1.5) as u16;
                 let text1_size = measure_text(&text_1, Some(&assets.font), font1_size, 1.0);
                 let text1_x = screen_width / 2.0 - text1_size.width / 2.0;
                 let text1_y = screen_height / 2.0 - text1_size.height / 2.0;
 
                 let text2 = "Press ENTER to play again...";
-                let font2_size = (CELL_SIZE / 2.0) as u16;
+                let font2_size = (tile_size / 2.0) as u16;
                 let text2_size = measure_text(&text2, Some(&assets.font),font2_size,1.0);
                 let text2_x = screen_width / 2.0 - text2_size.width / 2.0;
                 let text2_y = screen_height / 2.0 - text2_size.height / 2.0 + text1_size.height/2.0 + 20.0;
@@ -530,7 +515,7 @@ async fn main() {
                     }
                 );
                 if is_key_pressed(KeyCode::Enter) {
-                    initialize_grid(& mut grid); 
+                    initialize_grid(& mut grid, game.mines, game.tiles); 
                     state = GameState::GameRunning;
                 }
             }
@@ -539,19 +524,19 @@ async fn main() {
                 for tile in &mut grid {
                     tile.revealed = true;
                 }
-                draw_grid(&grid, &assets, &state);
+                draw_grid(&grid, &assets, &state, game.rows, game.columns, MAX_TILE_SIZE);
 
                 let screen_width = screen_width();
                 let screen_height = screen_height();
 
                 let text1 = "You Won!";
-                let font1_size = (CELL_SIZE / 1.5) as u16;
+                let font1_size = (tile_size / 1.5) as u16;
                 let text1_size = measure_text(&text1, Some(&assets.font),font1_size,1.0);
                 let text1_x = screen_width / 2.0 - text1_size.width / 2.0;
                 let text1_y = screen_height / 2.0 - text1_size.height / 2.0;
 
                 let text2 = "Press ENTER to play again...";
-                let font2_size = (CELL_SIZE / 2.0) as u16;
+                let font2_size = (tile_size / 2.0) as u16;
                 let text2_size = measure_text(&text2, Some(&assets.font),font2_size,1.0);
                 let text2_x = screen_width / 2.0 - text2_size.width / 2.0;
                 let text2_y = screen_height / 2.0 - text2_size.height / 2.0 + text1_size.height/2.0 + 20.0;
@@ -589,7 +574,7 @@ async fn main() {
                 );
 
                 if is_key_pressed(KeyCode::Enter) { 
-                    initialize_grid(& mut grid);
+                    initialize_grid(& mut grid, game.mines, game.tiles);
                     state = GameState::GameRunning;
                 }
             }
