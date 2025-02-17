@@ -14,7 +14,6 @@ Expert       -> 30 x 16 grid, 99 mines
 // - Update logic, so that first celected cell is not a mine
 // - Add timer and display time on screen
 // - Improve main manu and add level selection
-// - Fix screen for different levels, adjust tile sizes
 // - Add top menu and adjust grid positioning
 // - Clean-up draw_grid function, match on game state
 // - Move grid, tile, input handling etc code in own modules
@@ -22,6 +21,7 @@ Expert       -> 30 x 16 grid, 99 mines
 const WINDOW_WIDTH:i32 = 800;
 const WINDOW_HEIGHT:i32 = 600;
 const MAX_TILE_SIZE:f32 = 80.0;
+const BACKGROUND:Color = Color::new(0.05, 0.05, 0.05, 1.0);
 
 #[allow(dead_code)]
 struct Game {
@@ -132,6 +132,14 @@ fn calculate_tile_size(rows:u8, columns:u8, max_tile_size:f32) -> f32 {
     ((screen_width / columns as f32).min(screen_height / (rows as f32 + 1.0))).min(max_tile_size)
 }
 
+// calculate grid offsets to center the grid on the screen
+fn calculate_grid_offsets(rows:u8, columns:u8, max_tile_size:f32) -> (f32, f32) {
+    let tile_size = calculate_tile_size(rows, columns, max_tile_size);
+    let x_offset = (screen_width() - columns as f32 * tile_size) / 2.0;
+    let y_offset = (screen_height() - rows as f32 * tile_size) / 2.0;
+    (x_offset, y_offset)
+}
+
 fn is_tile_in_grid(row:i32, col:i32, grid_rows:u8, grid_cols:u8) ->bool {
     return row >= 0 && row < grid_rows as i32 && col >= 0 && col < grid_cols as i32;
 }
@@ -148,10 +156,12 @@ fn screen_to_tile_id(mouse_x:f32, mouse_y:f32, columns:i32, rows:i32, tile_size:
 }
 
 fn draw_grid(arr: &[Tile], assets:&Assets, state:&GameState, rows:u8, columns:u8, max_tile_size:f32) {
+    let tile_size = calculate_tile_size(rows, columns, max_tile_size);
+    let x_offset = (screen_width() - columns as f32 * tile_size) / 2.0;
+    let y_offset = (screen_height() - rows as f32 * tile_size) / 2.0;
     for i in 0..arr.len() {
-        let tile_size = calculate_tile_size(rows, columns, max_tile_size);
-        let x:f32 = (i as u8 % columns) as f32 * tile_size;
-        let y:f32 = (i as u8 / columns) as f32 * tile_size;
+        let x:f32 = x_offset + (i as u8 % columns) as f32 * tile_size;
+        let y:f32 = y_offset + (i as u8 / columns) as f32 * tile_size;
 
         if arr[i].revealed {
             draw_rectangle(x, y, tile_size, tile_size, GRAY);
@@ -384,8 +394,7 @@ async fn main() {
     let mut grid:Vec<Tile> = vec![Tile { revealed: false, has_mine: false, flagged: false, adjacent_mines: 0 }; game.tiles as usize];
 
     loop {
-        clear_background(DARKBROWN);
-        update_game_state(&grid, &mut state, game.mines);
+        clear_background(BACKGROUND);
         let tile_size = calculate_tile_size(game.rows, game.columns, MAX_TILE_SIZE);
 
         match state {
@@ -413,7 +422,7 @@ async fn main() {
                 );
 
                 let text2 = "Press ENTER to play...";
-                let font2_size = (tile_size / 2.0) as u16;
+                let font2_size = (tile_size / 1.5) as u16;
                 let text2_size = measure_text(&text2, Some(&assets.font),font2_size,1.0);
                 let text2_x = screen_width / 2.0 - text2_size.width / 2.0;
                 let text2_y = screen_height / 2.0 - text2_size.height / 2.0 + text1_size.height/2.0 + 20.0;
@@ -437,11 +446,16 @@ async fn main() {
             }
 
             GameState::GameRunning => {
+                update_game_state(&grid, &mut state, game.mines);
+        
+                //calculate grid offsets to center the grid on the screen
+                let (x_offset, y_offset) = calculate_grid_offsets(game.rows, game.columns, MAX_TILE_SIZE);
+
                 draw_grid(&grid, &assets, &state, game.rows, game.columns, game.cell_size);
        
                 if is_mouse_button_pressed(MouseButton::Right) {
                     let (mouse_x, mouse_y) = mouse_position();
-                    let tile_id = screen_to_tile_id(mouse_x, mouse_y, game.columns as i32, game.rows as i32, tile_size);
+                    let tile_id = screen_to_tile_id(mouse_x - x_offset, mouse_y - y_offset, game.columns as i32, game.rows as i32, tile_size);
                     if tile_id >= 0 {
                         flag_tile(& mut grid, tile_id as usize);
                     }
@@ -449,7 +463,7 @@ async fn main() {
 
                 if is_mouse_button_pressed(MouseButton::Left) {
                     let (mouse_x, mouse_y) = mouse_position();
-                    let tile_id = screen_to_tile_id(mouse_x, mouse_y, game.columns as i32, game.rows as i32, tile_size);
+                    let tile_id = screen_to_tile_id(mouse_x - x_offset, mouse_y - y_offset, game.columns as i32, game.rows as i32, tile_size);
                     if tile_id >= 0 {
                         grid[tile_id as usize].adjacent_mines = num_adjacent_mines(&grid, game.rows, game.columns, tile_id as usize);
                         reveal_tile(& mut grid, tile_id as usize, game.rows, game.columns);
@@ -458,7 +472,7 @@ async fn main() {
 
                 if is_mouse_button_down(MouseButton::Left) && is_mouse_button_down(MouseButton::Right) {
                     let (mouse_x, mouse_y) = mouse_position();
-                    let tile_id = screen_to_tile_id(mouse_x, mouse_y, game.columns as i32, game.rows as i32, tile_size);
+                    let tile_id = screen_to_tile_id(mouse_x - x_offset, mouse_y - y_offset, game.columns as i32, game.rows as i32, tile_size);
                     if tile_id >= 0 {
                         reveal_all_adjacent_tiles(&mut grid, tile_id as usize, game.rows, game.columns);
                     }
