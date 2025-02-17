@@ -388,7 +388,7 @@ fn window_conf() -> Conf {
 async fn main() {
     srand(macroquad::miniquad::date::now() as u64);
     let assets:Assets = Default::default();
-    let game:Game = Game::new(10, 10, 12);
+    let game:Game = Game::new(16, 16, 40);
 
     let mut state = GameState::MeinMenu;
     let mut grid:Vec<Tile> = vec![Tile { revealed: false, has_mine: false, flagged: false, adjacent_mines: 0 }; game.tiles as usize];
