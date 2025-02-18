@@ -19,7 +19,7 @@ Expert       -> 30 x 16 grid, 99 mines
 // - Move grid, tile, input handling etc code in own modules
 
 const WINDOW_WIDTH:i32 = 800;
-const WINDOW_HEIGHT:i32 = 600;
+const WINDOW_HEIGHT:i32 = 800;
 const MAX_TILE_SIZE:f32 = 80.0;
 const BACKGROUND:Color = Color::new(0.05, 0.05, 0.05, 1.0);
 
@@ -129,14 +129,14 @@ fn calculate_tile_size(rows:u8, columns:u8, max_tile_size:f32) -> f32 {
     let screen_width = screen_width();
     let screen_height = screen_height();
 
-    ((screen_width / columns as f32).min(screen_height / (rows as f32 + 1.0))).min(max_tile_size)
+    ((screen_width / columns as f32).min(screen_height / (rows as f32 + 2.0))).min(max_tile_size) // adding space for the top menu and some margin
 }
 
 // calculate grid offsets to center the grid on the screen
 fn calculate_grid_offsets(rows:u8, columns:u8, max_tile_size:f32) -> (f32, f32) {
     let tile_size = calculate_tile_size(rows, columns, max_tile_size);
     let x_offset = (screen_width() - columns as f32 * tile_size) / 2.0;
-    let y_offset = (screen_height() - rows as f32 * tile_size) / 2.0;
+    let y_offset = (screen_height() - (rows - 1) as f32 * tile_size) / 2.0; // adding space for the top menu and some margin
     (x_offset, y_offset)
 }
 
@@ -155,10 +155,9 @@ fn screen_to_tile_id(mouse_x:f32, mouse_y:f32, columns:i32, rows:i32, tile_size:
     }
 }
 
-fn draw_grid(arr: &[Tile], assets:&Assets, state:&GameState, rows:u8, columns:u8, max_tile_size:f32) {
+fn draw_grid(arr: &[Tile], assets:&Assets, state:&GameState, rows:u8, columns:u8, max_tile_size:f32, x_offset:f32, y_offset:f32) {
     let tile_size = calculate_tile_size(rows, columns, max_tile_size);
-    let x_offset = (screen_width() - columns as f32 * tile_size) / 2.0;
-    let y_offset = (screen_height() - rows as f32 * tile_size) / 2.0;
+
     for i in 0..arr.len() {
         let x:f32 = x_offset + (i as u8 % columns) as f32 * tile_size;
         let y:f32 = y_offset + (i as u8 / columns) as f32 * tile_size;
@@ -388,21 +387,22 @@ fn window_conf() -> Conf {
 async fn main() {
     srand(macroquad::miniquad::date::now() as u64);
     let assets:Assets = Default::default();
-    let game:Game = Game::new(16, 16, 40);
+    let mut game:Game = Game::new(16, 16, 40);
 
     let mut state = GameState::MeinMenu;
     let mut grid:Vec<Tile> = vec![Tile { revealed: false, has_mine: false, flagged: false, adjacent_mines: 0 }; game.tiles as usize];
+    let mut level_duration:f64;
+    let mut level_start_time = 0.0;
 
     loop {
         clear_background(BACKGROUND);
         let tile_size = calculate_tile_size(game.rows, game.columns, MAX_TILE_SIZE);
+        
+        let screen_width = screen_width();
+        let screen_height = screen_height();
 
         match state {
             GameState::MeinMenu => {
-                let screen_width = screen_width();
-                let screen_height = screen_height();
-                
-                
                 let text1 = "Rusty Mines";
                 let font1_size = tile_size as u16;
                 let text1_size = measure_text(&text1, Some(&assets.font),font1_size,1.0);
@@ -442,22 +442,25 @@ async fn main() {
                 if is_key_pressed(KeyCode::Enter) {
                     initialize_grid(& mut grid, game.mines, game.tiles); 
                     state = GameState::GameRunning;
+                    level_start_time = get_time();
                 }
             }
 
             GameState::GameRunning => {
                 update_game_state(&grid, &mut state, game.mines);
+                level_duration = get_time() - level_start_time;
         
                 //calculate grid offsets to center the grid on the screen
                 let (x_offset, y_offset) = calculate_grid_offsets(game.rows, game.columns, MAX_TILE_SIZE);
 
-                draw_grid(&grid, &assets, &state, game.rows, game.columns, game.cell_size);
+                draw_grid(&grid, &assets, &state, game.rows, game.columns, game.cell_size, x_offset, y_offset);
        
                 if is_mouse_button_pressed(MouseButton::Right) {
                     let (mouse_x, mouse_y) = mouse_position();
                     let tile_id = screen_to_tile_id(mouse_x - x_offset, mouse_y - y_offset, game.columns as i32, game.rows as i32, tile_size);
                     if tile_id >= 0 {
                         flag_tile(& mut grid, tile_id as usize);
+                        game.mines_flagged += 1;
                     }
                 }
 
@@ -476,13 +479,44 @@ async fn main() {
                     if tile_id >= 0 {
                         reveal_all_adjacent_tiles(&mut grid, tile_id as usize, game.rows, game.columns);
                     }
-                }            }
+                }
+
+                // Calculate the dimensions and position of the menu box
+                let menu_width = screen_width / 1.5;
+                let menu_height = tile_size;
+                let menu_x = (screen_width - menu_width) / 2.0;
+                let menu_y = tile_size / 4.0;
+
+                // Draw the menu background
+                let menu_col:Color = Color::new(0.2, 0.2, 0.2, 0.5);
+                draw_rectangle(menu_x, menu_y, menu_width, menu_height, menu_col);
+
+                // Calculate the position of the text to be centered in the menu
+                let text = &format!("Mines flagged: {} / {} | Time: {:.1}", game.mines_flagged, game.mines, level_duration);
+                let sample_text = "Mines flagged: 00 / 00 | Time: 00.0"; // avoid menu moving slightly each frame due to different text width
+                let font_size = (tile_size * 0.6) as u16;
+                let text_dimensions = measure_text(sample_text, Some(&assets.font), font_size, 1.0);
+                let text_x = menu_x + (menu_width - text_dimensions.width) / 2.0;
+                let text_y = menu_y + (menu_height - text_dimensions.height) / 2.0 + text_dimensions.offset_y;
+
+                // Draw the text
+                draw_text_ex(
+                    text,
+                    text_x,
+                    text_y,
+                    TextParams {
+                        font: Some(&assets.font),
+                        font_size: font_size,
+                        color: ORANGE,
+                        ..Default::default()
+                    },
+                );
+            }
 
             GameState::GameLost => {
-                draw_grid(&grid, &assets, &state, game.rows, game.columns, MAX_TILE_SIZE);
-
-                let screen_width = screen_width();
-                let screen_height = screen_height();
+                //calculate grid offsets to center the grid on the screen
+                let (x_offset, y_offset) = calculate_grid_offsets(game.rows, game.columns, MAX_TILE_SIZE);
+                draw_grid(&grid, &assets, &state, game.rows, game.columns, MAX_TILE_SIZE, x_offset, y_offset);
 
                 let text_1 = "BOOM! You Lost...";
                 let font1_size = (tile_size / 1.5) as u16;
@@ -530,6 +564,8 @@ async fn main() {
                 if is_key_pressed(KeyCode::Enter) {
                     initialize_grid(& mut grid, game.mines, game.tiles); 
                     state = GameState::GameRunning;
+                    game.mines_flagged = 0;
+                    level_start_time = get_time();
                 }
             }
             GameState::GameWon => {
@@ -537,10 +573,9 @@ async fn main() {
                 for tile in &mut grid {
                     tile.revealed = true;
                 }
-                draw_grid(&grid, &assets, &state, game.rows, game.columns, MAX_TILE_SIZE);
-
-                let screen_width = screen_width();
-                let screen_height = screen_height();
+                //calculate grid offsets to center the grid on the screen
+                let (x_offset, y_offset) = calculate_grid_offsets(game.rows, game.columns, MAX_TILE_SIZE);
+                draw_grid(&grid, &assets, &state, game.rows, game.columns, MAX_TILE_SIZE, x_offset, y_offset);
 
                 let text1 = "You Won!";
                 let font1_size = (tile_size / 1.5) as u16;
@@ -589,6 +624,8 @@ async fn main() {
                 if is_key_pressed(KeyCode::Enter) { 
                     initialize_grid(& mut grid, game.mines, game.tiles);
                     state = GameState::GameRunning;
+                    level_start_time = get_time();
+                    game.mines_flagged = 0;
                 }
             }
         }
