@@ -29,8 +29,8 @@ struct Level {
 }
 
 const LEVEL_1:Level = Level { rows: 8, columns: 8, mines: 10 };
-const LEVEL_2:Level = Level { rows: 12, columns: 12, mines: 24 };
-const LEVEL_3:Level = Level { rows: 16, columns: 16, mines: 40 };
+const LEVEL_2:Level = Level { rows: 16, columns: 16, mines: 40 };
+const LEVEL_3:Level = Level { rows: 30, columns: 16, mines: 99 };
 
 struct Game {
     rows:u8,
@@ -444,12 +444,12 @@ fn draw_top_ui_panel(screen_w:f32, font:&Font, mines_flagged:u16, mines:u16, lev
 #[macroquad::main(window_conf)]
 async fn main() {
     srand(macroquad::miniquad::date::now() as u64);
-    let assets: Assets = Default::default();
-    let mut game: Game = Game::new(8, 8, 12);
+    let assets:Assets = Default::default();
+    let mut game:Game = Game::new(8, 8, 12);
 
     let mut state = GameState::MeinMenu;
-    let mut grid: Vec<Tile> = vec![Tile { revealed: false, has_mine: false, flagged: false, adjacent_mines: 0 }; game.tiles as usize];
-    let mut level_duration: f64 = 0.0;
+    let mut grid:Vec<Tile> = vec![Tile { revealed: false, has_mine: false, flagged: false, adjacent_mines: 0 }; game.tiles as usize];
+    let mut level_duration:f64 = 0.0;
     let mut level_start_time = 0.0;
 
     // main menu screen config
@@ -459,7 +459,7 @@ async fn main() {
     loop {
         clear_background(BACKGROUND);
         let tile_size = calculate_tile_size(game.rows, game.columns, MAX_TILE_SIZE);
-
+        
         let screen_width = screen_width();
         let screen_height = screen_height();
 
@@ -472,11 +472,11 @@ async fn main() {
 
                 // Draw the title
                 let title = "RUSTY MINES";
-                let title_size = 50.0 * scale_factor;
+                let title_size = 50.0 * scale_factor;  
                 let title_dimensions = measure_text(title, Some(&assets.font), title_size as u16, 1.0);
                 let text1_x = screen_width / 2.0 - title_dimensions.width / 2.0;
-                let text1_y = title_dimensions.height + title_padding * scale_factor;
-                draw_text_ex(
+                let text1_y = title_dimensions.height + title_padding * scale_factor; //screen_height / 2.0 - title_dimensions.height / 2.0;
+                draw_text_ex( 
                     title,
                     text1_x,
                     text1_y,
@@ -488,71 +488,106 @@ async fn main() {
                     }
                 );
 
-                // Draw the buttons
-                let button_labels = ["Beginner", "Intermediate", "Expert"];
+        // Draw the buttons
+        let button_labels = ["Beginner", "Intermediate", "Expert"];
+ 
+        let button_height = 60.0 * scale_factor;
+        let button_width = 240.0 * scale_factor;
+        let button_spacing = 24.0 * scale_factor;
+        let total_height = button_labels.len() as f32 * (button_height + button_spacing) - button_spacing;
 
-                let button_height = 60.0 * scale_factor;
-                let button_width = 300.0 * scale_factor;
-                let button_spacing = 24.0 * scale_factor;
-                let total_height = button_labels.len() as f32 * (button_height + button_spacing) - button_spacing;
+        for (i, label) in button_labels.iter().enumerate() {
+            let y = screen_width / 2.0 - total_height / 2.0 + i as f32 * (button_height + button_spacing);
+            let x = screen_height / 2.0 - button_width / 2.0;
 
-                for (i, label) in button_labels.iter().enumerate() {
-                    let y = screen_height / 2.0 - total_height / 2.0 + i as f32 * (button_height + button_spacing);
-                    let x = screen_width / 2.0 - button_width / 2.0;
+            // Determine button color
+            let mouse_position = mouse_position();
+            let is_hovered = mouse_position.0 >= x && mouse_position.0 <= x + button_width &&
+                             mouse_position.1 >= y && mouse_position.1 <= y + button_height;
+            let color = if Some(i) == selected_button {
+                RED
+            } else if is_hovered {
+                DARKGRAY
+            } else {
+                GRAY
+            };
 
-                    // Determine button color
-                    let mouse_position = mouse_position();
-                    let is_hovered = mouse_position.0 >= x && mouse_position.0 <= x + button_width &&
-                                     mouse_position.1 >= y && mouse_position.1 <= y + button_height;
-                    let color = if Some(i) == selected_button {
-                        RED
-                    } else if is_hovered {
-                        DARKGRAY
-                    } else {
-                        GRAY
-                    };
+            // Draw button background
+            draw_rectangle(x, y, button_width, button_height, color);
 
-                    // Draw button background
-                    draw_rectangle(x, y, button_width, button_height, color);
+            // Draw button label
+            let label_size = 36.0 * scale_factor;
+            let label_dimensions = measure_text(label, None, label_size as u16, 1.0);
+            draw_text(
+                label,
+                x + button_width / 2.0 - label_dimensions.width / 2.0,
+                y + button_height / 2.0 + label_dimensions.height / 4.0,
+                label_size,
+                WHITE,
+            );
 
-                    // Draw button label
-                    let label_size = 36.0 * scale_factor;
-                    let label_dimensions = measure_text(label, Some(&assets.font), label_size as u16, 1.0);
-                    draw_text_ex(
-                        label,
-                        x + button_width / 2.0 - label_dimensions.width / 2.0,
-                        y + button_height / 2.0 + label_dimensions.height / 4.0,
-                        TextParams {
-                            font: Some(&assets.font),
-                            font_size: label_size as u16,
-                            color: ORANGE,
-                            ..Default::default()
-                        }
-                    );
+            // Check for mouse click
+            if is_mouse_button_pressed(MouseButton::Left) && is_hovered {
+                selected_button = Some(i);
+                my_level = match i {
+                    0 => LEVEL_1,
+                    1 => LEVEL_2,
+                    2 => LEVEL_3,
+                    _ => LEVEL_1,
+                };
+                game = Game::new(my_level.rows, my_level.columns, my_level.mines);
+                grid = vec![Tile { revealed: false, has_mine: false, flagged: false, adjacent_mines: 0 }; game.tiles as usize];
+                println!("Button clicked: {}", label);
+                println!("Tiles: {}", game.tiles);
+                println!("Rows: {}", game.rows);
+                println!("Cols: {}", game.columns);
+                initialize_grid(& mut grid, game.tiles); 
+                state = GameState::GameRunning;
+                level_start_time = get_time();
+            }
+        }
 
-                    // Check for mouse click
-                    if is_mouse_button_pressed(MouseButton::Left) && is_hovered {
-                        selected_button = Some(i);
-                        my_level = match i {
-                            0 => LEVEL_1,
-                            1 => LEVEL_2,
-                            2 => LEVEL_3,
-                            _ => LEVEL_1,
-                        };
-                        game = Game::new(my_level.rows, my_level.columns, my_level.mines);
-                        grid = vec![Tile { revealed: false, has_mine: false, flagged: false, adjacent_mines: 0 }; game.tiles as usize];
-                        println!("Button clicked: {}", label);
-                        println!("Tiles: {}", game.tiles);
-                        println!("Rows: {}", game.rows);
-                        println!("Cols: {}", game.columns);
-                        initialize_grid(&mut grid, game.tiles);
-                        state = GameState::GameRunning;
-                        level_start_time = get_time();
-                    }
-                }
+        // Draw the "Start Game!" button if a button is selected
+        // if selected_button.is_some() {
+        //     let start_button_label = "Start Game!";
+        //     let start_button_height = 80.0 * scale_factor;
+        //     let start_button_width = 300.0 * scale_factor;
+        //     let start_button_x = screen_width / 2.0 - start_button_width / 2.0;
+        //     let start_button_y = screen_height - start_button_height - 50.0 * scale_factor;
+
+        //     // Determine button color
+        //     let mouse_position = mouse_position();
+        //     let is_hovered = mouse_position.0 >= start_button_x && mouse_position.0 <= start_button_x + start_button_width &&
+        //                      mouse_position.1 >= start_button_y && mouse_position.1 <= start_button_y + start_button_height;
+        //     let color = if is_hovered {
+        //         DARKGRAY
+        //     } else {
+        //         GRAY
+        //     };
+
+        //     // Draw button background
+        //     draw_rectangle(start_button_x, start_button_y, start_button_width, start_button_height, color);
+
+        //     // Draw button label
+        //     let label_size = 40.0 * scale_factor;
+        //     let label_dimensions = measure_text(start_button_label, None, label_size as u16, 1.0);
+        //     draw_text(
+        //         start_button_label,
+        //         start_button_x + start_button_width / 2.0 - label_dimensions.width / 2.0,
+        //         start_button_y + start_button_height / 2.0 + label_dimensions.height / 4.0,
+        //         label_size,
+        //         WHITE,
+        //     );
+
+        //     // Check for mouse click
+        //     if is_mouse_button_pressed(MouseButton::Left) && is_hovered {
+        //         println!("Start Game button clicked!");
+        //         // Add your logic to start the game here
+        //     }
+        // }
 
                 if is_key_pressed(KeyCode::Enter) {
-                    initialize_grid(&mut grid, game.tiles);
+                    initialize_grid(& mut grid, game.tiles); 
                     state = GameState::GameRunning;
                     level_start_time = get_time();
                 }
@@ -561,12 +596,12 @@ async fn main() {
             GameState::GameRunning => {
                 level_duration = get_time() - level_start_time;
 
-                // Check game status, once mines are placed (after first click). If game is lost or won, update game state
+                // Check game status, once mines are placed (after first clisck). If game is lost or won, update game state
                 if game.mines_placed_in_grid {
                     update_game_state(&grid, &mut state, game.mines);
                 }
-
-                // Calculate grid offsets to center the grid on the screen
+                
+                //calculate grid offsets to center the grid on the screen
                 let (x_offset, y_offset) = calculate_grid_offsets(game.rows, game.columns, MAX_TILE_SIZE);
 
                 draw_grid(&grid, &assets, &state, game.rows, game.columns, game.cell_size, x_offset, y_offset);
@@ -577,31 +612,36 @@ async fn main() {
                     if tile_id >= 0 {
                         reveal_all_adjacent_tiles(&mut grid, tile_id as usize, game.rows, game.columns);
                     }
-                } else if is_mouse_button_pressed(MouseButton::Right) {
+                }
+       
+                else if is_mouse_button_pressed(MouseButton::Right){
                     let (mouse_x, mouse_y) = mouse_position();
                     let tile_id = screen_to_tile_id(mouse_x - x_offset, mouse_y - y_offset, game.columns as i32, game.rows as i32, tile_size);
                     if tile_id >= 0 {
-                        let flags_remaining = game.mines - game.mines_flagged;
-                        let tile_flag_changed: bool = flag_tile(&mut grid, tile_id as usize, flags_remaining);
+                        let flags_remaning = game.mines - game.mines_flagged;
+                        let tile_flag_changed:bool = flag_tile(& mut grid, tile_id as usize, flags_remaning);
                         if tile_flag_changed {
                             if grid[tile_id as usize].flagged {
                                 game.mines_flagged += 1;
-                            } else {
+                            }
+                            else {
                                 game.mines_flagged -= 1;
                             }
                         }
                     }
-                } else if is_mouse_button_pressed(MouseButton::Left) {
+                }
+
+                else if is_mouse_button_pressed(MouseButton::Left) {
                     let (mouse_x, mouse_y) = mouse_position();
                     let tile_id = screen_to_tile_id(mouse_x - x_offset, mouse_y - y_offset, game.columns as i32, game.rows as i32, tile_size);
                     if tile_id >= 0 {
                         if game.mines_placed_in_grid == false {
                             print!("Placing mines in grid...");
-                            place_mines(&mut grid, game.mines, game.tiles, tile_id as usize);
+                            place_mines(& mut grid, game.mines, game.tiles, tile_id as usize);
                             game.mines_placed_in_grid = true;
                         }
                         grid[tile_id as usize].adjacent_mines = num_adjacent_mines(&grid, game.rows, game.columns, tile_id as usize);
-                        reveal_tile(&mut grid, tile_id as usize, game.rows, game.columns);
+                        reveal_tile(& mut grid, tile_id as usize, game.rows, game.columns);
                     }
                 }
 
@@ -609,7 +649,7 @@ async fn main() {
             }
 
             GameState::GameLost => {
-                // Calculate grid offsets to center the grid on the screen
+                //calculate grid offsets to center the grid on the screen
                 let (x_offset, y_offset) = calculate_grid_offsets(game.rows, game.columns, MAX_TILE_SIZE);
                 draw_grid(&grid, &assets, &state, game.rows, game.columns, MAX_TILE_SIZE, x_offset, y_offset);
 
@@ -621,16 +661,16 @@ async fn main() {
 
                 let text2 = "Press ENTER to play again...";
                 let font2_size = (tile_size / 2.0) as u16;
-                let text2_size = measure_text(&text2, Some(&assets.font), font2_size, 1.0);
+                let text2_size = measure_text(&text2, Some(&assets.font),font2_size,1.0);
                 let text2_x = screen_width / 2.0 - text2_size.width / 2.0;
-                let text2_y = screen_height / 2.0 - text2_size.height / 2.0 + text1_size.height / 2.0 + 20.0;
+                let text2_y = screen_height / 2.0 - text2_size.height / 2.0 + text1_size.height/2.0 + 20.0;
 
                 let margin = 5.0;
                 let rectx = text1_x.min(text2_x) - margin;
-                let recty = text1_y.min(text2_y) - text1_size.height - margin;
+                let recty= text1_y.min(text2_y) - text1_size.height - margin;
                 let rectw = text1_size.width.max(text2_size.width) + margin + margin;
                 let recth = text1_size.height + 20.0 + text2_size.height + margin;
-                let rect_col: Color = Color::new(0.0, 0.0, 0.0, 0.5);
+                let rect_col:Color = Color::new(0.0, 0.0, 0.0, 0.5);
                 draw_rectangle(rectx, recty, rectw, recth, rect_col);
 
                 draw_text_ex(
@@ -660,7 +700,7 @@ async fn main() {
                 draw_top_ui_panel(screen_width, &assets.font, game.mines_flagged, game.mines, level_duration, tile_size);
 
                 if is_key_pressed(KeyCode::Enter) {
-                    initialize_grid(&mut grid, game.tiles);
+                    initialize_grid(& mut grid, game.tiles); 
                     state = GameState::GameRunning;
                     game.mines_flagged = 0;
                     game.mines_placed_in_grid = false;
@@ -668,33 +708,34 @@ async fn main() {
                 }
             }
             GameState::GameWon => {
+
                 for tile in &mut grid {
                     tile.revealed = true;
                 }
-                // Calculate grid offsets to center the grid on the screen
+                //calculate grid offsets to center the grid on the screen
                 let (x_offset, y_offset) = calculate_grid_offsets(game.rows, game.columns, MAX_TILE_SIZE);
                 draw_grid(&grid, &assets, &state, game.rows, game.columns, MAX_TILE_SIZE, x_offset, y_offset);
 
                 let text1 = "You Won!";
                 let font1_size = (tile_size / 1.5) as u16;
-                let text1_size = measure_text(&text1, Some(&assets.font), font1_size, 1.0);
+                let text1_size = measure_text(&text1, Some(&assets.font),font1_size,1.0);
                 let text1_x = screen_width / 2.0 - text1_size.width / 2.0;
                 let text1_y = screen_height / 2.0 - text1_size.height / 2.0;
 
                 let text2 = "Press ENTER to play again...";
                 let font2_size = (tile_size / 2.0) as u16;
-                let text2_size = measure_text(&text2, Some(&assets.font), font2_size, 1.0);
+                let text2_size = measure_text(&text2, Some(&assets.font),font2_size,1.0);
                 let text2_x = screen_width / 2.0 - text2_size.width / 2.0;
-                let text2_y = screen_height / 2.0 - text2_size.height / 2.0 + text1_size.height / 2.0 + 20.0;
+                let text2_y = screen_height / 2.0 - text2_size.height / 2.0 + text1_size.height/2.0 + 20.0;
 
                 let margin = 5.0;
                 let rectx = text1_x.min(text2_x) - margin;
-                let recty = text1_y.min(text2_y) - text1_size.height - margin;
+                let recty= text1_y.min(text2_y) - text1_size.height - margin;
                 let rectw = text1_size.width.max(text2_size.width) + margin + margin;
                 let recth = text1_size.height + 20.0 + text2_size.height + margin;
-                let rect_col: Color = Color::new(0.0, 0.0, 0.0, 0.5);
+                let rect_col:Color = Color::new(0.0, 0.0, 0.0, 0.5);
                 draw_rectangle(rectx, recty, rectw, recth, rect_col);
-
+                
                 draw_text_ex(
                     &text1,
                     text1_x,
@@ -706,7 +747,7 @@ async fn main() {
                         ..Default::default()
                     }
                 );
-
+                
                 draw_text_ex(
                     &text2,
                     text2_x,
@@ -721,8 +762,8 @@ async fn main() {
 
                 draw_top_ui_panel(screen_width, &assets.font, game.mines_flagged, game.mines, level_duration, tile_size);
 
-                if is_key_pressed(KeyCode::Enter) {
-                    initialize_grid(&mut grid, game.tiles);
+                if is_key_pressed(KeyCode::Enter) { 
+                    initialize_grid(& mut grid, game.tiles);
                     state = GameState::GameRunning;
                     level_start_time = get_time();
                     game.mines_flagged = 0;
